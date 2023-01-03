@@ -1,0 +1,832 @@
+---
+title: "Churn Prediction Project Report - HarvardX PH125.9x"
+author: "BenoitAnger"
+date: "2022-12-29"
+output: pdf_document
+header-includes:
+  - |
+    ```{=latex}
+    \usepackage{fvextra}
+    \DefineVerbatimEnvironment{Highlighting}{Verbatim}{
+      breaksymbolleft={}, 
+      showspaces = false,
+      showtabs = false,
+      breaklines,
+      commandchars=\\\{\}
+    }
+    ```
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+##########################################################
+# Import data and install packages 
+##########################################################
+
+# install packages
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+library(tidyverse)
+
+if(!require(devtools)) install.packages("devtools")
+library(devtools)
+
+if(!require(gdata)) install.packages("gdata")
+library(gdata)
+
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+library(caret)
+
+if(!require(rpart)) install.packages("rpart")
+library(rpart)
+
+if(!require(rpart.plot)) install.packages("rpart.plot ")
+library(rpart.plot)
+
+
+if(!require(randomForest)) install.packages("randomForest")
+library(randomForest)
+
+if(!require(magrittr)) install.packages("cran.r-project.org/src/contrib/Archive/magrittr/…", repos = NULL, type="source")
+library(magrittr)
+
+if(!require(ggpubr)) install.packages("ggpubr")
+library(ggpubr)
+
+if(!require(corrplot)) install.packages("corrplot ")
+library(corrplot)
+
+# import data
+data_url<-"https://raw.githubusercontent.com/BN33/TelcoChurnProject-HarvardX-PH125.9x-Data-Science-Capstone-/main/WA_Fn-UseC_-Telco-Customer-Churn.csv"
+data_original<-read.csv(data_url)
+
+```
+
+# 1 Introduction
+
+Churn, or the loss of customers, is a significant concern for companies that have a subscription of pay as you go model, which generally spend significant money to acquire customers hoping they will be retain for a long time. This is especially important in the telecommunications industry. In order to address this issue, it is important for telecommunications companies ‘telcos’) to understand the factors that contribute to churn and to be able to predict which customers are at risk of leaving. Indeed, a telco which understand customers at risk of churning could be targeted by marketing efforts to limit the chances for them to leave. 
+This report aims to explore churn in a telecommunications company using data science techniques to build a predictive model of churn and understand the main factors influencing the risk of churn.
+
+The dataset for this study consists of over 7000 observations of customers, with 20 features that may potentially influence churn. The dataset is provided by Kaggle.com and is available to download under the name “Telco Customer Churn” (link in the Reference section).
+
+The goal of this analysis is to provide insights that can inform retention strategies for the telecommunications company. As mentioned, a telco would be interested in identifying high risk customers and try to retain them by offering discounts or other incentives. Sensitivity (how well the model will identify customers at risk) is therefore an important measure of success of the model. But specificity (how well the model identifies customer at low risk) is also an important criteria as the telco would like to avoid wasting marketing incentives for customers who are unlikely to churn. Balanced accuracy is therefore an important indicator of the quality of the model.
+
+The objectives of the study are to (1) build a predictive model which achieves both a high level of accuracy (2) identify the most important predictors of churn.
+
+The report is structured into four main parts. In the first part, we will prepare the data for analysis and perform an exploratory data analysis to understand the characteristics of the dataset. In the second part, we will build and evaluate multiple predictive models to determine the best one for our objectives. In the third part, we will analyze the results of the models and discuss the implications. Finally, we will provide a conclusion and list the references used in the study.
+
+To help the reader, we have kept clear definitions of each variables used in the project:
+
+### 1.1 Data dictionary 
+
+#### 1.1.1 Dataframes
+
+Data frame| Description 
+---------------|------------------
+data_original|Original dataset downloaded as csv and imported into R
+data_clean|Dataset after data cleaning operations
+train_set|Partition of the whole data (data_clean) allocated to train the models
+test_set|Partition of the whole data (data_clean) allocated to test the models
+
+
+There are a few additional dataframes, derived from the main datasets shown here, which are created for the purpose of the data visualization and the modeling which are not listed here.
+
+
+#### 1.1.2 Columns (predictors or features) in original dataframes
+
+Variable Name|Description|Values|Type
+------------------|--------------------|--------------------|--------------------
+customerID|Customer ID|String|Feature/predictor
+gender|Whether the customer is a male or a female|Male, Female|Feature/predictor
+SeniorCitizen|Whether the customer is a senior citizen or not|1, 0|Feature/predictor
+Partner|Whether the customer has a partner or not|Yes, No|Feature/predictor
+Dependents|Whether the customer has dependents or not|Yes, No|Feature/predictor
+tenure|Number of months the customer has stayed with the company|Numeric|Feature/predictor
+PhoneService|Whether the customer has a phone service or not|Yes, No|Feature/predictor
+MultipleLines| Whether the customer has multiple lines or not|Yes, No, No phone service|Feature/predictor
+InternetService|Customer’s internet service provider|DSL, Fiber optic, No|Feature/predictor
+OnlineSecurity|Whether the customer has online security or not|Yes, No, No internet service|Feature/predictor
+OnlineBackup|Whether the customer has online backup or not|Yes, No, No internet service|Feature/predictor
+DeviceProtection|Whether the customer has device protection or not|Yes, No, No internet service|Feature/predictor
+TechSupport|Whether the customer has tech support or not|Yes, No, No internet service|Feature/predictor
+StreamingTV|Whether the customer has streaming TV or not|Yes, No, No internet service|Feature/predictor
+StreamingMovies|Whether the customer has streaming movies or not|Yes, No, No internet service|Feature/predictor
+Contract|The contract term of the customer|Month-to-month, One year, Two year|Feature/predictor
+PaperlessBilling|Whether the customer has paperless billing or not|Yes, No|Feature/predictor
+PaymentMethod|The customer’s payment method|Electronic check, Mailed check, Bank transfer (automatic), Credit card (automatic)) |Feature/predictor
+MonthlyCharges|The amount charged to the customer monthly|Numeric|Feature/predictor
+TotalCharges|The total amount charged to the customer|Numeric|Feature/predictor
+Churn|Whether the customer churned or not|Yes or No|Outcome to predict
+
+
+# 2. Methodology & Modeling Process 
+
+
+## 2.1 Methodology
+
+The methodology applied is the following:
+
+1. Exploration of the data sets in order to have an overview of the available data and variables and visualize them to gain insights
+
+2. Data cleaning to prepare the datasets for the modeling step
+
+3. Modeling, building several algorithms that are potential candidates for our situation and evaluate them based on accuracy and balanced accuracy to retain the best possible model. The detailed approach is describe in the first paragraph (2.5.1) of modeling section. 
+
+
+## 2.2 Datasets overview 
+
+### 2.2.1 Overview of the original dataset
+
+The dataset contains  `r dim(data_original)[1]` customer observations and `r dim(data_original)[2]` columns.
+
+Here is an overview of the columns:
+```{r, echo=FALSE}
+str(data_original)
+```
+
+The outcome to predict (Churn) is represented as follows:
+```{r, echo=FALSE}
+churn_summary <-data_original %>% group_by(Churn) %>% summarise(Count=n()) %>% mutate(percentage=Count/sum(Count))
+churn_summary
+```
+
+Insight(s):
+
+(1) There are many predictors
+
+(2) Most of the predictors are categories rather than numeric (continuous)
+
+(3) The first column is a customer ID hence has no predicted power and can be deleted
+
+(4) The churn rate is `r round(churn_summary[2,3],4)*100` %
+
+
+
+### 2.2.2 Overview of the continuous predictors
+
+Here is an overview of the numeric (continuous) predictors:
+```{r, echo=FALSE}
+continuous <-select_if(data_original, is.numeric)
+summary(continuous)
+```
+
+We can visualize the data here:
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE }
+# set the colors to use (in the whole report)
+colors=c("#EEF5DB" , "#FE5F55" , "#B8D8D8" , "#7A9E9F" , "#4F6367" , "#203539" , "#D2E49F" , "#B1C47F" , "#BE1A12")
+
+# select continuous features
+continous_names<-colnames(continuous)
+
+# build the boxplots
+boxplot1<- continuous %>% ggplot(aes(x= SeniorCitizen)) + geom_boxplot(fill = colors[3], colour = colors[6])+coord_flip()+theme(panel.background = element_blank(),axis.text.x = element_blank(), axis.ticks.x = element_blank()) + xlab("") + facet_grid(. ~ continous_names[1])
+
+boxplot2<- continuous %>% ggplot(aes(x= tenure)) + geom_boxplot(fill = colors[3], colour = colors[6])+coord_flip()+theme(panel.background = element_blank(),axis.text.x = element_blank(), axis.ticks.x = element_blank()) + xlab("") + facet_grid(. ~ continous_names[2])
+
+boxplot3<- continuous %>% ggplot(aes(x= MonthlyCharges)) + geom_boxplot(fill = colors[3], colour = colors[6])+coord_flip()+theme(panel.background = element_blank(),axis.text.x = element_blank(), axis.ticks.x = element_blank()) + xlab("") + facet_grid(. ~ continous_names[3])
+
+boxplot4<- continuous %>% ggplot(aes(x= TotalCharges)) + geom_boxplot(fill = colors[3], colour = colors[6])+coord_flip()+theme(panel.background = element_blank(),axis.text.x = element_blank(), axis.ticks.x = element_blank()) + xlab("") + facet_grid(. ~ continous_names[4])
+
+# arrange and print the bowplots
+ggarrange(boxplot1,boxplot2,boxplot3,boxplot4)
+```
+
+
+
+We can see that those variables are quite widely distributed. This should make them good predictors.
+However, one might suspect a high degree of correlation between them, which would decrease significantly the predictive power that we could expect.
+
+Looking at correlation, we can indeed see that they are very correlated:
+
+```{r, echo=FALSE}
+corrplot(cor(na.omit(continuous)), method="color", col=colorRampPalette(c(colors[5],"white",colors[2]))(200) )
+```
+
+Especially:
+
+* Correlation between Tenure and Total Charges: `r round(cor(na.omit(data_original)$tenure,na.omit(data_original)$TotalCharges),2)`
+
+* Correlation between Monthly Charges and Total Charges: `r round(cor(na.omit(data_original)$MonthlyCharges,na.omit(data_original)$TotalCharges),2)`
+
+* Correlation between Total Charges and the Tenure multiplied by the Monthly Charges: `r round(cor( na.omit(data_original)$MonthlyCharges* na.omit(data_original)$tenure ,na.omit(data_original)$TotalCharges),4)`
+
+
+
+Insight(s):
+
+(5) Very few Seniors in the dataset
+
+(6) Tenure between `r summary(continuous)[1,2]` and `r summary(continuous)[5,2]` months with a `r summary(continuous)[3,2]`
+
+(7) Monthly charges between `r summary(continuous)[1,3]` and `r summary(continuous)[5,3]` dollars with a `r summary(continuous)[3,3]`
+
+(8) Total charges `r summary(continuous)[1,4]` and `r summary(continuous)[5,4]` months with a `r summary(continuous)[3,4]`
+
+(9) Some NA’s in the Total charges
+
+(10) Though Tenure, Monthly Charges and Total Charges seem widely distributed and potential good predictors, they are highly correlated; Total Charges is especially almost perfectly correlated with the Tenure multiplied by the Monthly Charges
+
+
+### 2.2.3 Overview of the categorical predictors
+
+We can visualize the data here:
+
+```{r, echo=FALSE}
+# prepare the summary tables per feature
+gender <- data_original %>% group_by(Value=gender) %>% summarise(Count=n())
+Partner <- data_original %>% group_by(Value=Partner) %>% summarise(Count=n())
+Dependents <- data_original %>% group_by(Value=Dependents) %>% summarise(Count=n())
+PhoneService <- data_original %>% group_by(Value= PhoneService) %>% summarise(Count =n())
+MultipleLines <- data_original %>% group_by(Value= MultipleLines) %>% summarise(Count =n())
+InternetService <- data_original %>% group_by(Value=InternetService) %>% summarise(Count=n())
+OnlineSecurity <- data_original %>% group_by(Value=OnlineSecurity) %>% summarise(Count =n())
+OnlineBackup <- data_original %>% group_by(Value=OnlineBackup) %>% summarise(Count =n())
+DeviceProtection <- data_original %>% group_by(Value=DeviceProtection) %>% summarise(Count=n())
+TechSupport <- data_original %>% group_by(Value=TechSupport) %>% summarise(Count=n())
+StreamingTV <- data_original %>% group_by(Value=StreamingTV) %>% summarise(Count=n())
+StreamingMovies <- data_original %>% group_by(Value=StreamingMovies) %>% summarise(Count=n())
+Contract <- data_original %>% group_by(Value= Contract) %>% summarise(Count=n())
+PaperlessBilling <- data_original %>% group_by(Value=PaperlessBilling) %>% summarise(Count=n())
+PaymentMethod <- data_original %>% group_by(Value=PaymentMethod) %>% summarise(Count=n())
+
+# combine them in a first table and build the associated chart
+intermed_table1 <-gdata::combine(gender, Partner, Dependents, PhoneService, MultipleLines)
+
+ggplot(intermed_table1, aes(x = source, y = Count, fill = Value)) + geom_bar(stat = "identity", position = "fill") + scale_fill_manual(values=colors) + theme(panel.background = element_blank())+scale_x_discrete(guide = guide_axis(n.dodge=2))+ xlab("")+ylab("Proportion")
+
+# combine them in a second table and build the associated chart
+intermed_table2 <-gdata::combine(InternetService, OnlineSecurity, OnlineBackup, DeviceProtection, TechSupport, StreamingTV, StreamingMovies)
+
+ggplot(intermed_table2, aes(x = source, y = Count, fill = Value)) + geom_bar(stat = "identity", position = "fill") + scale_fill_manual(values=colors) + theme(panel.background = element_blank())+scale_x_discrete(guide = guide_axis(n.dodge=2))+ xlab("")+ylab("Proportion")
+
+# combine them in a last table and build the associated chart
+intermed_table3 <-gdata::combine(Contract, PaperlessBilling, PaymentMethod)
+
+ggplot(intermed_table3, aes(x = source, y = Count, fill = Value)) + geom_bar(stat = "identity", position = "fill") + scale_fill_manual(values=colors) + theme(panel.background = element_blank())+scale_x_discrete(guide = guide_axis(n.dodge=2))+ xlab("")+ylab("Proportion")
+```
+
+Those variables have binary outcome or at best a few categories which would probably not make them very insightful predictors.
+
+Moreover, some variables are probably highly correlated:
+
+* First, we can reasonably assume that all optional services (Multiple lines, Internet services, and the six additional services to Internet: Online security, Online Backup, Device Protection, Tech support, Streaming TV, Streaming movies) are highly correlated with Monthly Charges 
+
+* Second, the six additional services to Internet (Online security, Online Backup, Device Protection, Tech support, Streaming TV, Streaming movies) have all the same category “No internet” with the same customers
+
+This can be visualized here:
+
+```{r, echo=FALSE}
+internet<-na.omit(data_original[,c(10:15,20)])
+corrplot(cor(data.matrix(internet)), method="color",col=colorRampPalette(c(colors[5],"white",colors[2]))(200) )
+```
+
+Which confirms to some extent the expectations.
+
+
+
+Insight(s):
+
+(11) Many variables, rather widely distributed
+
+(12) But probably a limited predicted power as the variables are binary or categorical with a few categories, correlated among the range of categorical variables and correlated with some continuous ones (Charges)
+
+
+
+
+## 2.4 Datasets preparation 
+
+In order to prepare the data for the machine learning algorithm, we will perform a few tasks:
+
+1. We have seen in the exploration that there are some NA’s in the dataset, more precisely there are `r length(which(is.na(data_original))) missing data points. As this is a very low number, we can safely delete the rows with missing data without affecting our results. We do this and store the data in a new dataframe (data_clean) that we will then use for the modeling.
+```{r, echo=FALSE}
+data_clean<-na.omit(data_original)
+```
+
+2. The customerID has no predictive power as this is only an ID, hence we remove it to have cleaner data (that R will treat more quickly).
+```{r, echo=FALSE}
+data_clean<-data_clean[,-1]
+```
+
+3. We create two partitions of the data to have one dataset to train the models and another one to test the models. We choose to allocate 80% to the train dataset and 20% to the test dataset.
+We call those sets respectively “train_set” and “test_set”
+```{r, echo=FALSE, warning=FALSE}
+set.seed(2, sample.kind = "Rounding") 
+test_index <- createDataPartition(data_clean$Churn, times = 1, p = 0.20, list = FALSE)
+test_set <- data_clean[test_index, ]
+train_set <- data_clean[-test_index, ]
+```
+
+4. Machine learning algorithms need factored datasets, so we convert “train_set” and “test_set” as factored data sets.
+```{r, echo=FALSE}
+train_set <- as.data.frame(unclass(train_set), stringsAsFactors = TRUE)
+test_set <- as.data.frame(unclass(test_set), stringsAsFactors = TRUE)
+```
+
+
+## 2.5 Modeling
+
+### 2.5.1 Approach
+Thanks to the data exploration, we understand that we have to predict a binary outcome with many predictors, but with several ones that seem correlated and a lot which are categorical.
+
+Based on the course and the research (see references in the reference section), we believe that we should try several types of models adapted to the prediction of binary outcomes. In order to be comprehensive, we will try all the models presented in the course (some are not applicable such as LDA and QDA due to the binary type of outcome to predict and the large number of predictors). We will also try additional methods found in the research as good model for predicting binary outcome.
+Finally, we will try to ensemble several machine learning algorithm, applying the technique presented in the course.
+
+### 2.5.2 Building algorithms
+
+#### 2.5.2.1 Logistic regression (glm)
+The idea to use this model comes from both the course and the research.
+
+In order to try to get the best results, we train and immediately optimize the model using the caret package. The code is the following:
+
+```{r, warning=FALSE}
+# configurate the control parameters
+fit_control_glm <- trainControl(method = "repeatedcv", number = 10, repeats = 50)
+
+# train the model
+fit_glm <- train(Churn ~ ., data = train_set, method = "glm", family = "binomial", trControl = fit_control_glm)
+
+# build predictions and evaluate them 
+predictions_glm <- predict(fit_glm, newdata = test_set)
+cm_glm<-confusionMatrix(data = predictions_glm, reference = test_set$Churn, positive = "Yes")
+```
+
+The confusion matrix for the model is the following:
+
+```{r, echo=FALSE}
+cm_glm
+```
+
+
+The main results of this algorithm are as follows:
+
+```{r, echo=FALSE, warning=FALSE}
+algo_results <- bind_rows(data_frame("Model #"="1", "Algorithm details"="Logistic regression (glm)", Accuracy = cm_glm$overall["Accuracy"], "Balanced Accuracy"= cm_glm[["byClass"]][["Balanced Accuracy"]]))
+algo_results %>% knitr::kable()
+```
+
+
+#### 2.5.2.2 Nearest neighbors (knn)
+The idea to use this model comes from both the course and the research.
+
+In order to try to get the best results, we train and immediately optimize the model using the caret package. The code is the following:
+
+```{r}
+# knn k optimization function
+accuracy_function_knn <- function(x){
+    fit_knn <- fit_knn <- knn3(Churn ~ ., data = train_set, k=x)
+    predictions_knn <- predict(fit_knn, newdata = test_set, type = "class")
+    confusionMatrix(data = predictions_knn, reference = test_set$Churn)$overall["Accuracy"]
+}
+
+# finding the k that optimizes the accuracy
+knn_ks <- seq(1, 50, 1)
+knn_accuracies<-sapply(knn_ks, accuracy_function_knn)
+knn_kfinal<- knn_ks[which.max(knn_accuracies)]
+
+# train the model
+fit_knn <- knn3(Churn ~ ., data = train_set, k= knn_kfinal)
+
+# build predictions and evaluate them 
+predictions_knn <- predict(fit_knn, newdata = test_set, type = "class")
+cm_knn<-confusionMatrix(data = predictions_knn, reference = test_set$Churn, positive = "Yes")
+```
+
+The confusion matrix for the model is the following:
+
+```{r, echo=FALSE}
+cm_knn
+```
+
+The main results of this algorithm are as follows:
+
+```{r, echo=FALSE}
+algo_results <- bind_rows(algo_results,data_frame("Model #"="2", "Algorithm details"="Nearest neighbors (knn)", Accuracy = cm_knn$overall["Accuracy"], "Balanced Accuracy"= cm_knn[["byClass"]][["Balanced Accuracy"]]))
+algo_results %>% knitr::kable()
+```
+
+
+#### 2.5.2.3 Decision tree (rpart)
+The idea to use this model comes from both the course and the research. The course especially mention that decision tree are well suited to predict categorical outcomes.
+
+In order to try to get the best results, we train and immediately optimize the model using the caret package. The code is the following (we use here the Caret package which after testing gave better performance than the Rpart package):
+
+```{r}
+# train the model with optimization embedded in the code
+fit_rpart <- train(Churn ~ ., method = "rpart", tuneGrid = data.frame(cp = seq(0, 0.05, len = 25)), data = train_set)
+
+# build predictions and evaluate them 
+predictions_rpart <- predict(fit_rpart, newdata = test_set)
+cm_rpart<-confusionMatrix(data = predictions_rpart, reference = test_set$Churn, positive ="Yes")
+```
+
+The tree built is the following:
+
+```{r, echo=FALSE}
+# visualise the tree
+rpart.plot(fit_rpart$finalModel)
+```
+
+The confusion matrix for the model is the following:
+
+```{r, echo=FALSE}
+cm_rpart
+```
+
+
+The main results of this algorithm are as follows:
+```{r, echo=FALSE}
+algo_results <- bind_rows(algo_results,data_frame("Model #"="3", "Algorithm details"="Decision tree (rpart)", Accuracy = cm_rpart$overall["Accuracy"], "Balanced Accuracy"= cm_rpart[["byClass"]][["Balanced Accuracy"]]))
+algo_results %>% knitr::kable()
+```
+
+#### 2.5.2.4 Random forest (rf)
+The idea to use this model comes from both the course and the research. 
+
+In order to try to get the best results, we train and immediately optimize the model using the caret package. The code is the following (we use here the Random Forest package which after testing gave better performance than the Rborist method of the Caret package):
+
+```{r}
+# train the model with optimization embedded in the code 
+fit_rf <-  randomForest(y=train_set$Churn, x=train_set[,-20], prox=TRUE)
+
+# build predictions and evaluate them 
+predictions_rf <- predict(fit_rf , newdata = test_set)
+cm_rf<-confusionMatrix(data = predictions_rf, reference = test_set$Churn, positive ="Yes")
+```
+
+The confusion matrix for the model is the following:
+
+```{r, echo=FALSE}
+cm_rf
+```
+
+
+The main results of this algorithm are as follows:
+```{r, echo=FALSE}
+algo_results <- bind_rows(algo_results,data_frame("Model #"="4", "Algorithm details"="Random forest (rf)", Accuracy = cm_rf$overall["Accuracy"], "Balanced Accuracy"= cm_rf[["byClass"]][["Balanced Accuracy"]]))
+algo_results %>% knitr::kable()
+```
+
+
+#### 2.5.2.5 Gradient boosting (gbm)
+The idea to use this model comes from both the research. 
+
+In order to try to get the best results, we train the model using the caret package. The code is the following:
+
+```{r, results='hide'}
+# train the model 
+fit_gbm<-train(Churn~.,data=train_set, method ='gbm')
+
+# build predictions and evaluate them 
+predictions_gbm<-predict(fit_gbm, newdata = test_set)
+cm_gbm<-confusionMatrix(data = predictions_gbm, reference = test_set$Churn, positive ="Yes")
+```
+
+
+The confusion matrix for the model is the following:
+
+```{r, echo=FALSE}
+cm_gbm
+```
+
+
+The main results of this algorithm are as follows:
+```{r, echo=FALSE}
+algo_results <- bind_rows(algo_results,data_frame("Model #"="5", "Algorithm details"="Gradient boosting (gbm)", Accuracy = cm_gbm$overall["Accuracy"], "Balanced Accuracy"= cm_gbm[["byClass"]][["Balanced Accuracy"]]))
+algo_results %>% knitr::kable()
+```
+
+
+#### 2.5.2.6 Multilayer perceptron (mlp)
+The idea to use this model comes from both the research. 
+
+In order to try to get the best results, we train the model using the caret package. The code is the following:
+
+```{r, warning=FALSE}
+# train the model 
+fit_mlp<-train(Churn~.,data=train_set, method ='mlp')
+
+# build predictions and evaluate them 
+predictions_mlp<-predict(fit_mlp, newdata = test_set)
+cm_mlp<-confusionMatrix(data = predictions_mlp, reference = test_set$Churn, positive ="Yes")
+```
+
+
+The confusion matrix for the model is the following:
+
+```{r, echo=FALSE}
+cm_mlp
+```
+
+
+The main results of this algorithm are as follows:
+```{r, echo=FALSE}
+algo_results <- bind_rows(algo_results,data_frame("Model #"="6", "Algorithm details"="Multilayer perceptron (mlp)", Accuracy = cm_mlp$overall["Accuracy"], "Balanced Accuracy"= cm_mlp[["byClass"]][["Balanced Accuracy"]]))
+algo_results %>% knitr::kable()
+```
+
+
+#### 2.5.2.7 Naïve bayes (nb)
+The idea to use this model comes from both the research. 
+
+In order to try to get the best results, we train the model using the caret package. The code is the following:
+
+```{r}
+# train the model 
+fit_nb<-train(Churn~.,data=train_set, method ='naive_bayes')
+
+# build predictions and evaluate them 
+predictions_nb<-predict(fit_nb, newdata = test_set)
+cm_nb<-confusionMatrix(data = predictions_nb, reference = test_set$Churn, positive ="Yes")
+```
+
+
+The confusion matrix for the model is the following:
+
+```{r, echo=FALSE}
+cm_nb
+```
+
+
+The main results of this algorithm are as follows:
+```{r, echo=FALSE}
+algo_results <- bind_rows(algo_results,data_frame("Model #"="7", "Algorithm details"="Naïve bayes (nb)", Accuracy = cm_nb$overall["Accuracy"], "Balanced Accuracy"= cm_nb[["byClass"]][["Balanced Accuracy"]]))
+algo_results %>% knitr::kable()
+```
+
+
+#### 2.5.2.8 Bayesian generalized linear model (bglm)
+The idea to use this model comes from both the research. 
+
+In order to try to get the best results, we train the model using the caret package. The code is the following:
+
+```{r}
+# train the model 
+fit_bglm<-train(Churn~.,data=train_set, method ='bayesglm')
+
+# build predictions and evaluate them 
+predictions_bglm<-predict(fit_bglm, newdata = test_set)
+cm_bglm<-confusionMatrix(data = predictions_bglm, reference = test_set$Churn, positive ="Yes")
+```
+
+
+The confusion matrix for the model is the following:
+
+```{r, echo=FALSE}
+cm_bglm
+```
+
+
+The main results of this algorithm are as follows:
+```{r, echo=FALSE}
+algo_results <- bind_rows(algo_results,data_frame("Model #"="8", "Algorithm details"="Bayesian GLM (bglm)", Accuracy = cm_bglm$overall["Accuracy"], "Balanced Accuracy"= cm_bglm[["byClass"]][["Balanced Accuracy"]]))
+algo_results %>% knitr::kable()
+```
+
+
+#### 2.5.2.9 Neural network (nn)
+The idea to use this model comes from both the research. 
+
+In order to try to get the best results, we train the model using the caret package. The code is the following:
+
+```{r, results='hide'}
+# train the model 
+fit_nn<-train(Churn~.,data=train_set, method ='pcaNNet')
+
+# build predictions and evaluate them 
+predictions_nn<-predict(fit_nn, newdata = test_set)
+cm_nn<-confusionMatrix(data = predictions_nn, reference = test_set$Churn, positive ="Yes")
+```
+
+
+The confusion matrix for the model is the following:
+
+```{r, echo=FALSE}
+cm_nn
+```
+
+
+The main results of this algorithm are as follows:
+```{r, echo=FALSE}
+algo_results <- bind_rows(algo_results,data_frame("Model #"="9", "Algorithm details"="Neural network (nn)", Accuracy = cm_nn$overall["Accuracy"], "Balanced Accuracy"= cm_nn[["byClass"]][["Balanced Accuracy"]]))
+algo_results %>% knitr::kable()
+```
+
+
+#### 2.5.2.10 Support vector machine (svm)
+The idea to use this model comes from both the research. 
+
+In order to try to get the best results, we train the model using the caret package. The code is the following:
+
+```{r}
+# train the model 
+fit_svm<-train(Churn~.,data=train_set, method ='svmLinearWeights')
+
+# build predictions and evaluate them 
+predictions_svm<-predict(fit_svm, newdata = test_set)
+cm_svm<-confusionMatrix(data = predictions_svm, reference = test_set$Churn, positive ="Yes")
+```
+
+
+The confusion matrix for the model is the following:
+
+```{r, echo=FALSE}
+cm_svm
+```
+
+
+The main results of this algorithm are as follows:
+```{r, echo=FALSE}
+algo_results <- bind_rows(algo_results,data_frame("Model #"="10", "Algorithm details"="Support vector machine (svm)", Accuracy = cm_svm$overall["Accuracy"], "Balanced Accuracy"= cm_svm[["byClass"]][["Balanced Accuracy"]]))
+algo_results %>% knitr::kable()
+```
+
+
+### 2.5.3 Build the ensemble algorithm
+
+Despite testing many model, we are unfortunately topping at around 80% accuracy. In order to try and improve the performance, we will try a last technique described in the course: ensembling different models into one.
+
+As we have binary results, we need an odd number of models to combine. Since we have built 10 models and two of them models, Naives bayes and Multilayer perceptron, have a very poor performance compared to the other ones, we eliminate those one, hence we will chose 7 models (to keep an even number).
+
+The 7 best ones based on accuracy are the followings:
+```{r, echo=FALSE}
+knitr::kable(head((algo_results[order(-algo_results$Accuracy),]),n=7))
+```
+
+So we build a table with the predictions of those 7 models. 
+```{r, echo=FALSE}
+# building the overall table with the 7 predictions
+ensemble <-data.frame(predictions_glm, predictions_knn, predictions_rpart, predictions_rf, predictions_gbm, predictions_bglm, predictions_nn)
+```
+
+In order to determine the ensembles we want to try, we examine correlation between the predictions:
+```{r, echo=FALSE}
+ensemble_matrix<-data.matrix(ensemble)
+corrplot(cor(ensemble_matrix), method="color",col=colorRampPalette(c(colors[5],"white",colors[2]))(200) )
+```
+
+We decide to build 3 ensembles:
+
+* Ensemble 1: made up of the three less correlated predictions: logistic regression (glm), nearest neighbor (knn) and decision tree (rpart) 
+
+* Ensemble 2: adding two more models, selecting the least correlated ones: random forest (rf) and gradient boosting (gbm)
+
+* Ensemble 3: adding the last two models: bayesian glm (bglm) and nueral network (nn)
+
+We then assess the performance against the test data set and we get the following results:
+
+```{r, echo=FALSE}
+#building the ensembles
+ensemble1<- as.factor (ifelse(rowSums(ensemble_matrix[,c(1:3)]-1)>1,"Yes","No"))
+ensemble2<-as.factor(ifelse(rowSums(ensemble_matrix[,c(1:5)]-1)>2,"Yes","No"))
+ensemble3<-as.factor(ifelse(rowSums(ensemble_matrix[,c(1:7)]-1)>3,"Yes","No"))
+
+# computing the confusion matrices
+cm_e1<- confusionMatrix(data = ensemble1, reference = test_set$Churn, positive ="Yes")
+cm_e2<- confusionMatrix(data = ensemble2, reference = test_set$Churn, positive ="Yes")
+cm_e3<- confusionMatrix(data = ensemble3, reference = test_set$Churn, positive ="Yes")
+
+# adding the results to the result table
+algo_results <- bind_rows(algo_results,data_frame("Model #"="E1", "Algorithm details"="Ensemble 1", Accuracy = cm_e1$overall["Accuracy"], "Balanced Accuracy"= cm_e1[["byClass"]][["Balanced Accuracy"]]))
+algo_results <- bind_rows(algo_results,data_frame("Model #"="E2", "Algorithm details"="Ensemble 2", Accuracy = cm_e2$overall["Accuracy"], "Balanced Accuracy"= cm_e2[["byClass"]][["Balanced Accuracy"]]))
+algo_results <- bind_rows(algo_results,data_frame("Model #"="E3", "Algorithm details"="Ensemble 3", Accuracy = cm_e3$overall["Accuracy"], "Balanced Accuracy"= cm_e3[["byClass"]][["Balanced Accuracy"]]))
+
+algo_results %>% knitr::kable()
+```
+
+
+# 3. Results
+We first discuss the best model and then examine the importance of the features.
+
+
+## 3.1 Best model
+We can draw the following conclusions from the result table displayed above:
+
+* Most of the models have similar performance (Accuracy around 80% and Balanced accuracy slightly above 70%). Only two models have a much poorer performance
+
+* This performance can be improved significantly by ensembling several model. The first ensemble of models (ensemble 1 which is combining 3 models) give the best performance with an Accuracy of `r round(cm_e1$overall["Accuracy"],4)*100` % and a Balanced accuracy of `r round(cm_e1[["byClass"]][["Balanced Accuracy"]],4)*100` %. The fact that this ensemble performs better seems logical as the 3 single models ensembled seemed the least correlated.
+
+* While the performance of the best model (Ensemble 1) is relatively good, we could have expected better results given the initial data set made up of more than 7 thousands observations and 20 features. The below expected performance is due to the fact that some features are correlated, many are categorical (and a lot even binary) and that the outcome is binary
+
+
+## 3.2 Feature importance
+For most of the models, it is not possible to understand the importance of features. For instance for logistic regression, it is difficult due to correlation of features. 
+Two models can help us to understand feature importance: decision tree and random forest.
+
+We can visualize the importance here:
+
+```{r, echo=FALSE}
+# build the decision tree from rpart package in order to use the importance functionality of the package
+fit_rpart2 <- rpart(Churn ~ ., data = train_set) 
+predictions_rpart2 <- predict(fit_rpart2, test_set,type="class")
+
+# building the tables and the chart to visualize importance of features of both models
+rpart_importance <- as.data.frame(fit_rpart2$variable.importance)
+rpart_importance <- cbind(Feature = rownames(rpart_importance), rpart_importance)
+
+rf_importance <- as.data.frame(randomForest::importance(fit_rf))
+rf_importance <- cbind(Feature = rownames(rf_importance), rf_importance)
+
+colnames(rpart_importance)<-c("Feature","Importance")
+colnames(rf_importance)<-c("Feature","Importance")
+
+rownames(rpart_importance)<-NULL
+rownames(rf_importance)<-NULL
+
+importance <- gdata::combine(rf_importance, rpart_importance)
+colnames(importance)<- c("Feature","Importance","Model")
+
+importance %>% mutate(Feature = fct_reorder(Feature, Importance)) %>% ggplot(aes(fill=Model, y=Importance, x=Feature)) + geom_bar(position="dodge", stat="identity") + coord_flip()+scale_fill_manual(values=c(colors[1],colors[3]) )+ theme(panel.background = element_blank())
+```
+
+As expected in the exploration part, we can observe that:
+
+* Only a few features have high importance: Tenure, Contract, Total Charges and Monthly Charges (bearing in mind that Total Charges is extremely highly correlated with Tenure multiplied by Monthly Charges)
+
+* Around half of the features have very low importance
+
+* In general, continuous features have much more importance than categorical or binary ones
+
+
+
+# 4. Conclusion
+In this report, we analyzed a dataset of customer churn data and built 10 single models and 3 ensembles to predict churn rate. Our best model (Ensemble 1) achieved an accuracy of over 80%, which is highly useful for a company looking to reduce churn. With this level of accuracy, the company can run targeted marketing retention programs to improve customer retention.
+
+Through our analysis, we also identified the key features that predict churn: Tenure, Contract type, and Charges paid. Understanding these factors can provide valuable insights for the company's retention efforts.
+
+While the performance of our models could be improved by building and combining additional models, the current results are still promising. Additionally, the models can be optimized to prioritize either sensitivity or specificity based on the company's marketing campaign results and cost-benefit analysis.
+
+
+# 5. References
+
+
+Here is the list of resources used to build this report
+
+
+### Dataset
+
+* Original Data: 
+
+Telco Customer Churn, 
+https://www.kaggle.com/datasets/blastchar/telco-customer-churn, accessed on Dec. 29th, 2022
+
+* Data copied on github:
+https://github.com/BN33/TelcoChurnProject-HarvardX-PH125.9x-Data-Science-Capstone-/blob/main/WA_Fn-UseC_-Telco-Customer-Churn.csv
+
+
+### Data visualisation
+
+* Grouped, stacked and percent stacked barplot in ggplot2
+https://r-graph-gallery.com/48-grouped-barplot-with-ggplot2.html, accessed on Dec. 29th, 2022
+
+* Reorder a variable with ggplot2
+https://r-graph-gallery.com/267-reorder-a-variable-in-ggplot2.html , accessed on Dec. 29th, 2022
+
+* Plotting binary outcomes,
+https://casual-inference.com/post/plotting-binary-outcomes/, accessed on Dec. 29th, 2022
+
+* ggplot2 colors : How to change colors automatically and manually?
+http://www.sthda.com/english/wiki/ggplot2-colors-how-to-change-colors-automatically-and-manually , accessed on Dec. 29th, 2022
+
+* ggplot2 - Easy Way to Mix Multiple Graphs on The Same Page
+http://www.sthda.com/english/articles/24-ggpubr-publication-ready-plots/81-ggplot2-easy-way-to-mix-multiple-graphs-on-the-same-page/, accessed on Dec. 29th, 2022
+
+* Combine (rbind) data frames and create column with name of original data frames
+https://stackoverflow.com/questions/15162197/combine-rbind-data-frames-and-create-column-with-name-of-original-data-frames, accessed on Dec. 29th, 2022
+
+* Chapter 4 Bivariate Graphs
+https://rkabacoff.github.io/datavis/Bivariate.html , accessed on Dec. 29th, 2022
+
+* HarvardX Data Science Certificate Courses 
+
+
+### Machine learning for binary outcome predictions
+
+* Predicting Customer Churn using Machine Learning Models
+https://www.vshsolutions.com/blogs/predicting-customer-churn-using-machine-learning-models/, accessed on Dec. 29th, 2022
+
+* Which machine learning method should choose to predict binary outcome based on several binary predictors?
+https://community.rstudio.com/t/which-machine-learning-method-should-choose-to-predict-binary-outcome-based-on-several-binary-predictors/154335/4, accessed on Dec. 29th, 2022
+
+* Machine Learning: Trying to classify your data
+https://srnghn.medium.com/machine-learning-trying-to-predict-a-categorical-outcome-6ba542b854f5, accessed on Dec. 29th, 2022
+
+* CHAPTER 1 Choosing the Right Classification Model
+https://www.mathworks.com/campaigns/offers/next/choosing-the-best-machine-learning-classification-model-and-avoiding-overfitting.html, accessed on Dec. 29th, 2022
+
+* 6-Available Models
+https://topepo.github.io/caret/available-models.html, accessed on Dec. 29th, 2022
+
+* The best machine learning model for binary classification
+https://ruslanmv.com/blog/The-best-binary-Machine-Learning-Model, accessed on Dec. 29th, 2022
+
+* HarvardX “Data Science: Machine Learning” Course
+
+
+### R
+
+* https://stackoverflow.com, accessed on Dec. 29th, 2022
+
+
